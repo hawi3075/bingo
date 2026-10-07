@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+body{margin:0;background:#0f1722;color:#fff;font-family:sans-serif;padding:8px}
+.bar{display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px}
+#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;max-height:45vh;overflow:auto}
+#grid button{padding:8px 0;border:0;border-radius:6px;background:#22324a;color:#fff}
+#grid .taken{background:#555;opacity:.4}#grid .mine{background:#12b76a}
+.card{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:320px;margin:10px auto}
+.card div{background:#fff;color:#000;text-align:center;padding:12px 0;border-radius:6px;font-weight:bold}
+.card .h{background:#f5a623;color:#fff}.card .m{background:#12b76a;color:#fff}
+#big{font-size:56px;text-align:center;font-weight:bold}#msg{text-align:center;margin:6px}
+#win{display:none;position:fixed;inset:0;background:#000d;text-align:center;padding-top:30vh;font-size:26px}
+</style></head><body>
+<div class="bar"><span id="bal">Balance: -</span><span id="info"></span></div>
+<div id="msg">Connecting…</div><div id="big"></div>
+<div id="grid"></div><div id="card" class="card"></div><div id="called" style="font-size:12px"></div>
+<div id="win"></div>
+<script>
+const tg=window.Telegram&&Telegram.WebApp;if(tg)tg.expand();
+const ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws");
+ws.onopen=()=>ws.send(JSON.stringify({auth:tg?tg.initData:""}));
+const $=id=>document.getElementById(id),L="BINGO",letter=n=>L[Math.floor((n-1)/15)];
+let ac;function beep(){try{ac=ac||new AudioContext();const o=ac.createOscillator();o.connect(ac.destination);o.frequency.value=880;o.start();o.stop(ac.currentTime+.15)}catch(e){}}
+function say(t){if(!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
+function drawCard(c,called){const m=new Set(called||[]);m.add(0);
+ $("card").innerHTML=c?"<div class=h>B</div><div class=h>I</div><div class=h>N</div><div class=h>G</div><div class=h>O</div>"+
+ c.flat().map(x=>`<div class="${m.has(x)?"m":""}">${x||"★"}</div>`).join(""):""}
+ws.onmessage=e=>{const d=JSON.parse(e.data);
+ if(d.t=="lobby"){$("big").textContent="";$("win").style.display="none";$("called").textContent="";
+  $("bal").textContent="Balance: "+d.bal+" ETB";$("info").textContent="Stake "+d.stake+" ETB";
+  $("msg").textContent=(d.mine?"Card #"+d.mine+" selected. ":"Pick a card. ")+"Starts in "+d.left+"s";
+  const t=new Set(d.taken);$("grid").style.display="grid";
+  $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>
+   `<button class="${n==d.mine?"mine":t.has(n)?"taken":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="ws.send(JSON.stringify({pick:${n}}))">${n}</button>`).join("");
+  drawCard(d.card,[]);}
+ if(d.t=="call"){$("grid").style.display="none";const n=d.n;$("big").textContent=letter(n)+n;beep();say(letter(n)+" "+n);
+  $("msg").textContent=d.card?"Prize "+d.prize+" ETB — your card #"+d.mine:"Round in progress — wait for the next round";
+  $("info").textContent="Called "+d.called.length+"/75";$("called").textContent="Called: "+d.called.join(", ");drawCard(d.card,d.called);}
+ if(d.t=="win"){const w=$("win");w.style.display="block";w.innerHTML="🎉 BINGO!<br>"+d.names.join(", ")+"<br>wins "+d.prize+" ETB";say("Bingo! We have a winner")}};
+ws.onclose=()=>$("msg").textContent="Disconnected. Reopen the app.";
+</script></body></html>

@@ -1,0 +1,5 @@
+config.env
+bingo.db
+cloudflared.exe
+__pycache__/
+node_modules/
