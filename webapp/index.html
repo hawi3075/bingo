@@ -26,7 +26,7 @@ body{margin:0;background:#0b1220;color:#fff;font-family:system-ui,sans-serif;min
 .pill{background:#1e293b;border:1px solid #38bdf8;border-radius:20px;padding:5px 12px;font-weight:800;color:#fbbf24}
 .green{color:#22c55e;font-weight:800}
 /* lobby grid */
-#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-height:46vh;overflow:auto;padding:2px}
+#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-height:50vh;overflow:auto;padding:2px}
 #grid button{padding:9px 0;border:0;border-radius:8px;background:#1f2d47;color:#e2e8f0;font-weight:700;font-size:13px}
 #grid .t{background:#dc2626;color:#fff;opacity:.85}#grid .m{background:#16a34a;animation:bounce 1s infinite}
 /* cards */
@@ -118,7 +118,7 @@ ws.onmessage=e=>{const d=JSON.parse(e.data);
   $("lmsg").textContent=d.mine?"Card #"+d.mine+" selected — tap another to change":"Pick your card ("+d.stake+" ETB)";
   const t=new Set(d.taken);
   $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="ws.send(JSON.stringify({pick:${n}}))">${n}</button>`).join("");
-  $("pre").innerHTML=boardHTML(d.card,[],"pre")}
+  $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:24px 0">👆 Tap a number above to choose your card.<br>Your card will appear here.</div>'}
  if(d.t=="call"){show("game");S.card=d.card;S.called=d.called;const n=d.n,c=colOf(n);
   $("gp").textContent=d.prize;$("gn").textContent=S.players;$("gs").textContent=20;$("gc").textContent=d.called.length+"/75";
   const b=$("ball");b.textContent=L[c]+n;b.style.background=COL[c];b.style.setProperty("--c",COL[c]);b.classList.remove("go");void b.offsetWidth;b.classList.add("go");
