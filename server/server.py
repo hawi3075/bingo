@@ -1,4 +1,4 @@
-"""Jo Bingo: Telegram bot + game engine + web server + admin API."""
+"""HS Bingo: Telegram bot + game engine + web server + admin API."""
 import asyncio, json, os, random, hmac, hashlib, sqlite3, re, subprocess, base64, sys
 from urllib.parse import parse_qsl
 from aiohttp import web, WSMsgType
@@ -88,7 +88,9 @@ async def game_loop():
         logx("house", 0, round(pool - G.prize, 2)); logx("round", 0, len(G.of_user))
         names = [user(u)[1] for u in winners]
         for ws in list(conns):
-            await send(ws, {"t": "win", "names": names, "prize": share, "cards": [G.of_user[u] for u in winners]})
+            await send(ws, {"t": "win", "names": names, "prize": share, "cards": [G.of_user[u] for u in winners],
+                            "grid": card(G.of_user[winners[0]]), "ids": [str(u)[-4:] for u in winners],
+                            "called": G.called, "next": 10})
         await asyncio.sleep(10)
 
 # ---------- web ----------
@@ -155,7 +157,7 @@ async def start(m: Message):
     if user(m.from_user.id): return await m.answer("Welcome back!", reply_markup=menu())
     kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True,
                              keyboard=[[KeyboardButton(text="📱 Share phone to register", request_contact=True)]])
-    await m.answer("Welcome to Jo Bingo! Please register with your phone number.", reply_markup=kb)
+    await m.answer("Welcome to HS Bingo! Please register with your phone number.", reply_markup=kb)
 
 @dp.message(F.contact)
 async def contact(m: Message):
