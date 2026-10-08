@@ -4,131 +4,149 @@
 <title>HS Bingo</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-*{box-sizing:border-box}
-body{margin:0;background:#0b1220;color:#fff;font-family:system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
-.scr{display:none;padding:8px;animation:fade .4s}.scr.on{display:block}
-@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
-@keyframes pop{0%{transform:scale(.2) rotate(-200deg);opacity:0}70%{transform:scale(1.25) rotate(10deg)}100%{transform:scale(1) rotate(0);opacity:1}}
-@keyframes glow{0%,100%{box-shadow:0 0 14px var(--c)}50%{box-shadow:0 0 38px var(--c),0 0 60px var(--c)}}
-@keyframes mark{0%{transform:scale(1)}50%{transform:scale(1.35)}100%{transform:scale(1)}}
-@keyframes bg{0%{background-position:0 50%}100%{background-position:100% 50%}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;color:#fff;font-family:system-ui,sans-serif;min-height:100vh;overflow-x:hidden;
+ background:linear-gradient(135deg,#0a0620,#1e0a52,#07204a,#0a0620);background-size:400% 400%;animation:bg 14s ease infinite}
+body:before,body:after{content:"";position:fixed;width:260px;height:260px;border-radius:50%;filter:blur(70px);opacity:.35;z-index:-1;animation:drift 9s ease-in-out infinite alternate}
+body:before{background:#ec4899;top:-60px;left:-60px}body:after{background:#22d3ee;bottom:-60px;right:-60px;animation-delay:-4s}
+@keyframes drift{to{transform:translate(60px,80px) scale(1.3)}}
+@keyframes bg{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1}}
+@keyframes drop{0%{transform:translateY(-170px) scale(.4) rotate(-300deg);opacity:0}60%{transform:translateY(12px) scale(1.1) rotate(15deg);opacity:1}80%{transform:translateY(-6px)}100%{transform:none}}
+@keyframes glow{0%,100%{box-shadow:0 0 18px var(--c),inset 0 -8px 16px #0006}50%{box-shadow:0 0 46px var(--c),0 0 80px var(--c),inset 0 -8px 16px #0006}}
+@keyframes stamp{0%{transform:scale(2.2);opacity:0}60%{transform:scale(.85)}100%{transform:scale(1);opacity:1}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes shine{to{background-position:200% 0}}
 @keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
-@keyframes bounce{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scr{display:none;padding:10px;animation:fade .4s;max-width:430px;margin:auto}.scr.on{display:block}
+.glass{background:#ffffff14;border:1px solid #ffffff26;backdrop-filter:blur(8px);border-radius:16px}
 /* intro */
-#intro{position:fixed;inset:0;z-index:9;background:radial-gradient(circle at 50% 35%,#14532d,#04110a);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .6s}
+#intro{position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 40%,#1e3a8a,#050816);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .7s}
 #intro.off{opacity:0;pointer-events:none}
-.logo{width:190px;height:190px;border-radius:50%;border:8px solid #facc15;background:radial-gradient(#16a34a,#064e3b);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:glow 2s infinite;--c:#facc15}
-.logo b{font-size:46px;color:#facc15;text-shadow:0 3px 0 #92400e;line-height:1}.logo span{font-size:30px;font-weight:900;letter-spacing:2px}
-.ld{width:200px;height:8px;background:#222;border-radius:8px;margin-top:26px;overflow:hidden}.ld i{display:block;height:100%;width:0;background:linear-gradient(90deg,#10b981,#38bdf8);animation:ld 2s forwards}
-@keyframes ld{to{width:100%}}
-/* top bar */
-.top{display:flex;justify-content:space-between;align-items:center;background:#111b2e;border-radius:12px;padding:8px 10px;margin-bottom:8px;font-size:13px}
-.pill{background:#1e293b;border:1px solid #38bdf8;border-radius:20px;padding:5px 12px;font-weight:800;color:#fbbf24}
-.green{color:#22c55e;font-weight:800}
-/* lobby grid */
-#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-height:50vh;overflow:auto;padding:2px}
-#grid button{padding:9px 0;border:0;border-radius:8px;background:#1f2d47;color:#e2e8f0;font-weight:700;font-size:13px}
-#grid .t{background:#dc2626;color:#fff;opacity:.85}#grid .m{background:#16a34a;animation:bounce 1s infinite}
-
-.board{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;max-width:330px;margin:10px auto}
-.board .h{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;box-shadow:0 3px 6px #0006}
-.board .c{background:#f1f5f9;color:#0f172a;border-radius:9px;text-align:center;padding:10px 0;font-weight:800;font-size:17px;transition:.3s}
-.board .c.k{color:#fff;animation:mark .5s}
-.board .c.w{background:#064e3b!important;border:2px solid #f87171;box-shadow:0 0 14px #22c55e}
-.board .c.r{background:#dc2626!important;color:#fff}
+.logo{position:relative;width:200px;height:200px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%,#34d399,#065f46);border:8px solid #fbbf24;--c:#fbbf24;animation:glow 2s infinite}
+.logo:before{content:"";position:absolute;inset:-22px;border-radius:50%;border:3px dashed #fbbf24aa;animation:spin 12s linear infinite}
+.logo b{font-size:58px;line-height:1;color:#fde047;text-shadow:0 4px 0 #92400e,0 0 20px #fde047}.logo span{font-size:28px;font-weight:900;letter-spacing:4px}
+.ld{width:220px;height:9px;background:#ffffff22;border-radius:9px;margin-top:34px;overflow:hidden}.ld i{display:block;height:100%;width:0;background:linear-gradient(90deg,#22d3ee,#a78bfa,#ec4899);animation:ld 2s forwards}@keyframes ld{to{width:100%}}
+/* header */
+.top{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;margin-bottom:8px;font-size:12px;color:#cbd5e1}
+.top b{display:block;font-size:16px;color:#fff}.top .g{color:#4ade80}
+.pill{background:linear-gradient(135deg,#f59e0b,#ef4444);border-radius:30px;padding:8px 14px;font-weight:900;font-size:16px;box-shadow:0 0 18px #f59e0b88;animation:pulse 1s infinite}
+.legend{display:flex;gap:12px;justify-content:center;font-size:11px;color:#cbd5e1;margin:4px 0 8px}.legend i{display:inline-block;width:11px;height:11px;border-radius:4px;margin-right:4px;vertical-align:-1px}
+/* lobby */
+#grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;max-height:44vh;overflow:auto;padding:6px}
+#grid button{padding:10px 0;border:0;border-radius:10px;font-weight:800;font-size:13px;color:#e0e7ff;background:linear-gradient(160deg,#3b4a8f,#1e2a5e);box-shadow:0 3px 0 #0b1236}
+#grid button:active{transform:translateY(3px);box-shadow:none}
+#grid .t{background:linear-gradient(160deg,#ef4444,#991b1b);box-shadow:0 3px 0 #450a0a;opacity:.8}
+#grid .m{background:linear-gradient(160deg,#fde047,#f59e0b);color:#451a03;box-shadow:0 0 18px #fbbf24;animation:pulse 1s infinite}
+/* boards */
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px;margin:8px auto;max-width:360px}
+.board .h{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:19px;box-shadow:inset 0 -4px 8px #0005,0 3px 6px #0006}
+.board .c{background:linear-gradient(180deg,#fff,#cbd5e1);color:#0f172a;border-radius:12px;text-align:center;padding:12px 0;font-weight:900;font-size:18px;box-shadow:0 3px 0 #64748b;position:relative}
+.board .c.k{color:#fff;box-shadow:0 0 14px var(--c),0 3px 0 #0006;animation:stamp .45s}
+.board .c.w{background:linear-gradient(180deg,#16a34a,#064e3b)!important;color:#fff;border:2px solid #fde047;box-shadow:0 0 18px #4ade80;animation:pulse 1.2s infinite}
+.board .c.r{background:linear-gradient(180deg,#ef4444,#991b1b)!important;color:#fff}
 /* game */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
-.stats div{background:#111b2e;border-radius:10px;padding:7px 2px;text-align:center;font-size:11px;color:#94a3b8}.stats b{display:block;color:#fff;font-size:15px}
-.row{display:flex;gap:6px;align-items:flex-start}.row>*{flex:1}
-#ball{width:96px;height:96px;border-radius:50%;margin:8px auto;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;background:#444;--c:#444}
-#ball.go{animation:pop .7s,glow 1.4s .7s infinite}
-#prev{display:flex;gap:5px;justify-content:center;margin:6px 0}#prev i{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-style:normal;font-weight:800}
-.auto{display:flex;gap:8px;align-items:center;justify-content:center;font-size:12px;color:#f87171;margin:8px}
+.stats div{padding:7px 2px;text-align:center;font-size:10px;color:#a5b4fc;text-transform:uppercase;letter-spacing:.5px}.stats b{display:block;color:#fff;font-size:15px;letter-spacing:0}
+.stage{display:flex;align-items:center;justify-content:center;gap:12px;padding:12px;margin-bottom:8px}
+#ball{width:118px;height:118px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;--c:#6366f1;background:radial-gradient(circle at 30% 25%,#fff9 0,transparent 25%),var(--c);box-shadow:0 0 18px var(--c),inset 0 -8px 16px #0006;flex:none}
+#ball.go{animation:drop .9s,glow 1.6s .9s infinite}
+#ball small{font-size:22px;font-weight:900;text-shadow:0 2px 3px #0008;line-height:1}
+#ball .nm{width:64px;height:64px;border-radius:50%;background:#fff;color:#111;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;margin-top:2px;box-shadow:inset 0 -4px 6px #0003}
+#prev{display:flex;flex-direction:column;gap:6px}#prev i{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-style:normal;font-weight:900;box-shadow:inset 0 -3px 5px #0005;animation:fade .4s}
+.mb{display:grid;grid-template-columns:20px repeat(15,1fr);gap:2px;padding:6px;margin-bottom:8px;font-size:9px}
+.mb u{text-decoration:none;text-align:center;border-radius:3px;padding:3px 0;background:#ffffff14;color:#94a3b8;font-weight:700}
+.mb u.h{font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.mb u.on{color:#fff;background:var(--c);box-shadow:0 0 6px var(--c)}.mb u.new{animation:pulse .6s 3;outline:2px solid #fff}
+#msg{text-align:center;font-weight:800;font-size:14px;margin:4px;min-height:20px;color:#fde047}
+.auto{display:flex;gap:8px;align-items:center;justify-content:center;font-size:12px;color:#fca5a5;margin:2px}
 .sw{width:50px;height:26px;border-radius:14px;background:#334155;position:relative;cursor:pointer}.sw i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw.on{background:#22c55e}.sw.on i{left:27px}
-#msg{text-align:center;color:#cbd5e1;font-size:13px;margin:6px}
 /* winner */
-.panel{background:linear-gradient(135deg,#0f766e,#164e63);border-radius:16px;padding:14px;text-align:center;margin:8px 0;box-shadow:0 4px 18px #0008}
-.panel h1{margin:0;font-size:34px;letter-spacing:3px;animation:bounce 1s infinite}
-.chip{display:inline-block;background:#15803d;border-radius:8px;padding:4px 10px;font-weight:800;margin-top:6px}
-.frame{background:linear-gradient(120deg,#a78bfa,#f59e0b,#ec4899,#a78bfa);background-size:300% 300%;animation:bg 5s linear infinite alternate;border-radius:20px;padding:8px}
-.frame .in{background:linear-gradient(160deg,#115e59,#fda4af);border-radius:14px;padding:6px 8px}
-.foot{display:flex;justify-content:space-between;font-weight:800;color:#4ade80;padding:0 6px 6px}.foot span:last-child{color:#fff}
-.cd{font-size:30px;font-weight:900;color:#ef4444}.bar{height:7px;background:#ffffff40;border-radius:6px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:#22c55e;width:100%}
-.cf{position:fixed;top:-30px;font-size:22px;animation:fall 3.5s linear forwards;z-index:5;pointer-events:none}
-#snd{position:fixed;right:8px;bottom:8px;z-index:6;background:#1e293b;border:0;color:#fff;border-radius:50%;width:38px;height:38px;font-size:18px}
+.trophy{font-size:70px;text-align:center;animation:pulse 1s infinite;filter:drop-shadow(0 0 18px #fde047)}
+.big{font-size:44px;font-weight:900;text-align:center;letter-spacing:4px;margin:0;background:linear-gradient(90deg,#fde047,#f472b6,#22d3ee,#fde047);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 2.5s linear infinite}
+.chip{display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);border-radius:10px;padding:5px 12px;font-weight:900}
+.foot{display:flex;justify-content:space-between;font-weight:900;padding:0 12px 10px}.foot span:first-child{color:#4ade80}
+.cd{font-size:34px;font-weight:900;color:#f87171;text-align:center}.bar{height:8px;background:#ffffff30;border-radius:6px;margin:6px 12px 12px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#fde047);width:100%}
+.cf{position:fixed;top:-30px;font-size:24px;animation:fall 3.6s linear forwards;z-index:15;pointer-events:none}
+#snd{position:fixed;right:10px;bottom:10px;z-index:12;background:#ffffff22;backdrop-filter:blur(6px);border:1px solid #fff4;color:#fff;border-radius:50%;width:42px;height:42px;font-size:19px}
 </style></head><body>
-<div id="intro"><div class="logo"><b>HS</b><span>BINGO</span></div><div style="margin-top:20px;font-size:18px">Get ready to play!</div><div class="ld"><i></i></div></div>
+<div id="intro"><div class="logo"><b>HS</b><span>BINGO</span></div><div style="margin-top:34px;font-size:19px;letter-spacing:1px">Get ready to play!</div><div class="ld"><i></i></div></div>
 <button id="snd" onclick="mute=!mute;this.textContent=mute?'🔇':'🔊'">🔊</button>
 
 <div id="lobby" class="scr on">
- <div class="top"><span>Balance <b class="green" id="bal">0</b> ETB</span><span class="pill" id="cd">…</span><span>Stake <b id="stk">20</b> ETB</span></div>
- <div id="lmsg" style="text-align:center;margin:6px;font-size:13px">Connecting…</div>
- <div id="grid"></div><div id="pre" class="board"></div>
+ <div class="top glass"><span>Balance<b class="g"><span id="bal">0</span> ETB</b></span><span class="pill" id="cd">⏰ …</span><span style="text-align:right">Stake<b><span id="stk">20</span> ETB</b></span></div>
+ <div id="lmsg" style="text-align:center;font-weight:800;margin:6px">Connecting…</div>
+ <div class="legend"><span><i style="background:#3b4a8f"></i>Free</span><span><i style="background:#ef4444"></i>Taken</span><span><i style="background:#fbbf24"></i>Yours</span></div>
+ <div id="grid" class="glass"></div><div id="pre" class="board glass"></div>
 </div>
 
 <div id="game" class="scr">
- <div class="stats"><div>Derash<b id="gp">0</b></div><div>Players<b id="gn">0</b></div><div>Stake<b id="gs">20</b></div><div>Call<b id="gc">0/75</b></div></div>
- <div class="row"><div><div id="mine" class="board" style="margin:0"></div></div>
-  <div><div id="ball"></div><div id="prev"></div>
-   <div class="auto">AUTO <div class="sw on" id="sw" onclick="toggleAuto()"><i></i></div></div></div></div>
+ <div class="stats glass"><div>Prize<b id="gp">0</b></div><div>Players<b id="gn">0</b></div><div>Stake<b id="gs">20</b></div><div>Call<b id="gc">0/75</b></div></div>
+ <div class="stage glass"><div id="ball"></div><div id="prev"></div></div>
+ <div class="mb glass" id="mb"></div>
  <div id="msg"></div>
+ <div id="mine" class="board glass"></div>
+ <div class="auto">AUTO MARK <div class="sw on" id="sw" onclick="toggleAuto()"><i></i></div></div>
 </div>
 
 <div id="win" class="scr">
- <div class="panel"><h1>BINGO!</h1><span class="chip" id="wn"></span> <span style="font-weight:700">has won the game</span></div>
- <div class="frame"><div class="in"><div id="wb" class="board" style="margin:4px auto"></div>
-  <div class="foot"><span id="wp"></span><span id="wc"></span></div></div></div>
- <div class="panel"><div class="cd" id="nx">10s</div><div class="bar"><i id="nb"></i></div></div>
+ <div class="trophy" id="tr">🏆</div><h1 class="big" id="bw">BINGO!</h1>
+ <div style="text-align:center;margin:8px"><span class="chip" id="wn"></span> <b>has won the game</b></div>
+ <div class="board glass" id="wb" style="margin:6px auto 0"></div>
+ <div class="glass" style="margin-top:8px;padding-top:10px"><div class="foot"><span id="wp"></span><span id="wc"></span></div></div>
+ <div class="glass" style="margin-top:8px"><div class="cd" id="nx">10s</div><div class="bar"><i id="nb"></i></div></div>
 </div>
 
 <script>
 const tg=window.Telegram&&Telegram.WebApp;if(tg){tg.expand();tg.ready()}
-setTimeout(()=>$("intro").classList.add("off"),2100);
-const $=id=>document.getElementById(id),L="BINGO",COL=["#ef4444","#3b82f6","#eab308","#22c55e","#a855f7"];
-const colOf=n=>Math.floor((n-1)/15);
-let S={called:[],card:null,players:0,auto:true,man:new Set()},mute=false,ac,tick;
+setTimeout(()=>$("intro").classList.add("off"),2200);
+const $=id=>document.getElementById(id),L="BINGO",COL=["#ef4444","#3b82f6","#eab308","#22c55e","#a855f7"],HD=["#f59e0b","#22c55e","#3b82f6","#ef4444","#a855f7"];
+const colOf=n=>Math.floor((n-1)/15),me=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user?String(tg.initDataUnsafe.user.id):"";
+let S={called:[],card:null,players:0,auto:true,man:new Set()},mute=false,ac,tick,last=0;
 const ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws");
 ws.onopen=()=>ws.send(JSON.stringify({auth:tg?tg.initData:""}));
-ws.onclose=()=>{$("lmsg").textContent="Disconnected. Reopen from the bot.";};
-function show(id){["lobby","game","win"].forEach(x=>$(x).classList.toggle("on",x==id))}
+ws.onclose=()=>{$("lmsg").textContent="Disconnected. Reopen from the bot."};
+const show=id=>["lobby","game","win"].forEach(x=>$(x).classList.toggle("on",x==id));
+const hap=t=>{try{tg.HapticFeedback.impactOccurred(t||"medium")}catch(e){}};
 function tone(f,d=.15,t=0){if(mute)return;try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ac.destination);
  const T=ac.currentTime+t;g.gain.setValueAtTime(.25,T);g.gain.exponentialRampToValueAtTime(.001,T+d);o.start(T);o.stop(T+d)}catch(e){}}
 function say(t){if(mute||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
-function boardHTML(c,called,mode,lineSet){ // mode: 'play' | 'win' | 'pre'
- let h=[...L].map((l,i)=>`<div class="h" style="background:${["#f59e0b","#22c55e","#3b82f6","#ef4444","#a855f7"][i]}">${l}</div>`).join("");
- if(!c)return"";const set=new Set(called);
- c.forEach((row,r)=>row.forEach((x,k)=>{const free=x===0;
-  const on=free||(mode=="play"?(S.auto?set.has(x):S.man.has(x)&&set.has(x)):set.has(x));
-  let cls="c";if(mode=="win"){cls+=lineSet.has(r*5+k)?" w":(on&&!free?" r":"")}else if(on)cls+=" k";
-  const st=(mode!="win"&&on)?`style="background:${free?"#16a34a":COL[colOf(x)]}"`:"";
-  h+=`<div class="${cls}" ${st} onclick="${mode=="play"&&!free?`tap(${x})`:""}">${free?"★":x}</div>`}));
- return h}
-function tap(x){if(S.auto)return;S.man.add(x);renderGame()}
+function boardHTML(c,called,mode,ls){
+ if(!c)return"";let h=[...L].map((l,i)=>`<div class="h" style="background:${HD[i]}">${l}</div>`).join("");const set=new Set(called);
+ c.forEach((row,r)=>row.forEach((x,k)=>{const free=x===0,on=free||(mode=="play"?(S.auto?set.has(x):S.man.has(x)&&set.has(x)):set.has(x));
+  let cls="c";if(mode=="win")cls+=ls.has(r*5+k)?" w":(on&&!free?" r":"");else if(on)cls+=" k";
+  const col=free?"#16a34a":COL[colOf(x)],st=(mode!="win"&&on)?`style="background:${col};--c:${col}"`:"";
+  h+=`<div class="${cls}" ${st} onclick="${mode=="play"&&!free?`tap(${x})`:""}">${free?"★":x}</div>`}));return h}
+const tap=x=>{if(S.auto)return;S.man.add(x);hap("light");renderGame()};
 function toggleAuto(){S.auto=!S.auto;$("sw").classList.toggle("on",S.auto);renderGame()}
+function lines(g){const a=[];for(let i=0;i<5;i++){a.push([0,1,2,3,4].map(k=>i*5+k));a.push([0,1,2,3,4].map(k=>k*5+i))}a.push([0,6,12,18,24],[4,8,12,16,20]);return a}
+const cellAt=(g,p)=>g[Math.floor(p/5)][p%5];
+function need(g,called){const m=new Set([...called,0]);return Math.min(...lines(g).map(l=>l.filter(p=>!m.has(cellAt(g,p))).length))}
 function renderGame(){$("mine").innerHTML=boardHTML(S.card,S.called,"play")}
-function winLine(g,called){const m=new Set([...called,0]);const idx=[];
- for(let i=0;i<5;i++){idx.push([0,1,2,3,4].map(k=>i*5+k));idx.push([0,1,2,3,4].map(k=>k*5+i))}
- idx.push([0,6,12,18,24],[4,8,12,16,20]);
- for(const L of idx)if(L.every(p=>m.has(g[Math.floor(p/5)][p%5])))return new Set(L);return new Set()}
-function confetti(){for(let i=0;i<40;i++){const e=document.createElement("div");e.className="cf";e.textContent=["🎉","⭐","🎊","✨","💛"][i%5];
- e.style.left=Math.random()*100+"vw";e.style.animationDelay=Math.random()*1.5+"s";document.body.appendChild(e);setTimeout(()=>e.remove(),5500)}}
+function renderMaster(called,n){let h="";for(let r=0;r<5;r++){h+=`<u class="h" style="background:${HD[r]}">${L[r]}</u>`;
+ for(let k=1;k<=15;k++){const x=r*15+k,on=called.includes(x);h+=`<u class="${on?"on":""}${x==n?" new":""}" style="--c:${COL[r]}">${x}</u>`}}$("mb").innerHTML=h}
+function confetti(){for(let i=0;i<50;i++){const e=document.createElement("div");e.className="cf";e.textContent=["🎉","⭐","🎊","✨","💛","🪙"][i%6];
+ e.style.left=Math.random()*100+"vw";e.style.animationDelay=Math.random()*1.6+"s";document.body.appendChild(e);setTimeout(()=>e.remove(),5600)}}
 ws.onmessage=e=>{const d=JSON.parse(e.data);
  if(d.t=="lobby"){clearInterval(tick);show("lobby");S.called=[];S.man=new Set();S.players=d.taken.length;
   $("bal").textContent=d.bal;$("stk").textContent=d.stake;$("cd").textContent="⏰ "+d.left+"s";
-  $("lmsg").textContent=d.mine?"Card #"+d.mine+" selected — tap another to change":"Pick your card ("+d.stake+" ETB)";
+  $("lmsg").textContent=d.mine?"✅ Card #"+d.mine+" selected — tap another to change":"👇 Pick your lucky card ("+d.stake+" ETB)";
   const t=new Set(d.taken);
-  $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="ws.send(JSON.stringify({pick:${n}}))">${n}</button>`).join("");
-  $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#94a3b8;padding:24px 0">👆 Tap a number above to choose your card.<br>Your card will appear here.</div>'}
+  $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="hap('light');ws.send(JSON.stringify({pick:${n}}))">${n}</button>`).join("");
+  $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#a5b4fc;padding:22px 0">🎟️ Tap a number above.<br>Your card will appear here.</div>'}
  if(d.t=="call"){show("game");S.card=d.card;S.called=d.called;const n=d.n,c=colOf(n);
-  $("gp").textContent=d.prize;$("gn").textContent=S.players;$("gs").textContent=20;$("gc").textContent=d.called.length+"/75";
-  const b=$("ball");b.textContent=L[c]+n;b.style.background=COL[c];b.style.setProperty("--c",COL[c]);b.classList.remove("go");void b.offsetWidth;b.classList.add("go");
-  $("prev").innerHTML=d.called.slice(-5,-1).reverse().map(x=>`<i style="background:${COL[colOf(x)]}">${L[colOf(x)]}${x}</i>`).join("");
-  tone(300+c*110,.18);tone(500+c*110,.18,.12);say(L[c]+" "+n);
-  $("msg").textContent=d.card?"Your card #"+d.mine:"Round in progress — wait for the next round";renderGame()}
- if(d.t=="win"){show("win");const g=d.grid,line=winLine(g,d.called);
-  $("wn").textContent=d.names[0]+" (*"+d.ids[0]+")";$("wb").innerHTML=boardHTML(g,d.called,"win",line);
+  $("gp").textContent=d.prize;$("gn").textContent=S.players;$("gc").textContent=d.called.length+"/75";
+  const b=$("ball");b.innerHTML=`<small>${L[c]}</small><div class="nm">${n}</div>`;b.style.setProperty("--c",COL[c]);b.classList.remove("go");void b.offsetWidth;b.classList.add("go");
+  $("prev").innerHTML=d.called.slice(-4,-1).reverse().map(x=>`<i style="background:${COL[colOf(x)]}">${L[colOf(x)]}${x}</i>`).join("");
+  renderMaster(d.called,n);tone(300+c*110,.18);tone(500+c*110,.18,.12);say(L[c]+" "+n);hap();
+  if(d.card){const k=need(d.card,d.called);$("msg").textContent=k<=1?"🔥 1 number to BINGO!":k==2?"⚡ Only 2 to go!":"Your card #"+d.mine}else $("msg").textContent="👀 Round in progress — wait for the next round";
+  renderGame()}
+ if(d.t=="win"){show("win");const g=d.grid,m=new Set([...d.called,0]),ln=lines(g).find(l=>l.every(p=>m.has(cellAt(g,p)))),ls=new Set(ln||[]),mine=me&&me.slice(-4)==d.ids[0];
+  $("tr").textContent=mine?"🥳":"🏆";$("bw").textContent=mine?"YOU WON!":"BINGO!";
+  $("wn").textContent=d.names[0]+" (*"+d.ids[0]+")";$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
   $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards[0];
-  [523,659,784,1047].forEach((f,i)=>tone(f,.3,i*.16));say("Bingo! We have a winner");confetti();
-  let s=d.next||10;const total=s;$("nx").textContent=s+"s";$("nb").style.width="100%";clearInterval(tick);
-  tick=setInterval(()=>{s--;$("nx").textContent=Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/total*100+"%";if(s<=0)clearInterval(tick)},1000)}};
+  [523,659,784,1047,1319].forEach((f,i)=>tone(f,.3,i*.14));say(mine?"Congratulations! You won!":"Bingo! We have a winner");confetti();hap("heavy");
+  let s=d.next||10;const tot=s;$("nx").textContent="Next round in "+s+"s";$("nb").style.width="100%";clearInterval(tick);
+  tick=setInterval(()=>{s--;$("nx").textContent="Next round in "+Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/tot*100+"%";if(s<=0)clearInterval(tick)},1000)}};
 </script></body></html>
