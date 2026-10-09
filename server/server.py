@@ -9,7 +9,7 @@ from aiogram.types import (Message, CallbackQuery, ReplyKeyboardMarkup, Keyboard
 
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 
-def load_config():  # reads config.env (KEY=value lines)
+def load_config():  
     p = os.path.join(ROOT, "config.env")
     for line in open(p, encoding="utf-8") if os.path.exists(p) else []:
         if "=" in line and not line.strip().startswith("#"):
