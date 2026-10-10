@@ -1,4 +1,4 @@
-"""Jo Bingo: Telegram bot + game engine + web server + admin API."""
+"""HS Bingo: Telegram bot + game engine + web server + admin API."""
 import asyncio, json, os, random, hmac, hashlib, sqlite3, re, subprocess, base64, sys
 from urllib.parse import parse_qsl
 from aiohttp import web, WSMsgType
@@ -20,7 +20,10 @@ if ":" not in TOKEN: sys.exit("ERROR: open config.env and put your BOT_TOKEN (fr
 BASE = os.environ.get("BASE_URL", "").rstrip("/")
 ADMIN = int(os.environ.get("ADMIN_ID") or 0); ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 ACCT = {"Telebirr": os.environ.get("TELEBIRR_NO", "0911000000"), "CBEBirr": os.environ.get("CBE_NO", "0911000000")}
-STAKE, BONUS, LOBBY, CALL_EVERY, CUT = 20, 20, 40, 4, 0.2
+STAKE, BONUS, CALL_EVERY, CUT = 20, 20, 4, 0.2
+LOBBY = 7      # seconds to pick a card
+WIN_SHOW = 7   # seconds the winner card stays on screen
+BOTS = int(os.environ.get("TEST_BOTS") or 0)  # test mode: fake players (0 = off)
 CARDS = json.load(open(os.path.join(HERE, "cards.json")))  # 432 different cards
 NCARDS = len(CARDS)
 
@@ -31,6 +34,7 @@ def logx(k, uid, amt): db.execute("insert into log values(strftime('%s','now'),?
 def user(i): return db.execute("select phone,name,bal from u where id=?", (i,)).fetchone()
 def bal(i): u = user(i); return u[2] if u else 0
 def add(i, x): db.execute("update u set bal=bal+? where id=?", (x, i))
+def name_of(u): return "Bot" if u < 0 else user(u)[1]
 
 # ---------- game engine ----------
 def card(n): return CARDS[n - 1]
@@ -73,7 +77,12 @@ async def game_loop():
         G.phase = "lobby"; G.of_user = {}; G.by_card = {}; G.called = []
         for s in range(LOBBY, 0, -1):
             G.left = s; await push_lobby(); await asyncio.sleep(1)
-        if len(G.of_user) < 2:
+        if BOTS and len(G.of_user) >= 1:  # test mode: add fake players
+            free = [n for n in range(1, NCARDS + 1) if n not in G.by_card]
+            for i, n in enumerate(random.sample(free, BOTS), 1):
+                G.by_card[n] = -i; G.of_user[-i] = n
+            await push_lobby()
+        if len(G.of_user) < 2:  # a round needs 2+ players, refund the stake
             for u in G.of_user: add(u, STAKE)
             continue
         G.phase = "play"; pool = len(G.of_user) * STAKE; G.prize = round(pool * (1 - CUT), 2)
@@ -84,12 +93,16 @@ async def game_loop():
             if winners: break
             await asyncio.sleep(CALL_EVERY)
         share = round(G.prize / len(winners), 2)
-        for u in winners: add(u, share); logx("win", u, share)
-        logx("house", 0, round(pool - G.prize, 2)); logx("round", 0, len(G.of_user))
-        names = [user(u)[1] for u in winners]
+        for u in winners:
+            add(u, share)
+            if u > 0: logx("win", u, share)
+        if not BOTS: logx("house", 0, round(pool - G.prize, 2)); logx("round", 0, len(G.of_user))
+        names = [name_of(u) for u in winners]
         for ws in list(conns):
-            await send(ws, {"t": "win", "names": names, "prize": share, "cards": [G.of_user[u] for u in winners]})
-        await asyncio.sleep(10)
+            await send(ws, {"t": "win", "names": names, "prize": share, "cards": [G.of_user[u] for u in winners],
+                            "grid": card(G.of_user[winners[0]]), "ids": [str(abs(u))[-4:] for u in winners],
+                            "called": G.called, "next": WIN_SHOW})
+        await asyncio.sleep(WIN_SHOW)
 
 # ---------- web ----------
 def check(init):
@@ -108,7 +121,7 @@ async def ws_handler(req):
             uid = check(d["auth"])
             if not uid or not user(uid): await ws.close(); break
             conns[ws] = uid
-            await (push_lobby() if G.phase == "lobby" else bc_call(G.called[-1]))
+            await (push_lobby() if G.phase == "lobby" or not G.called else bc_call(G.called[-1]))
         elif uid and "pick" in d:
             pick(uid, int(d["pick"])); await push_lobby()
     conns.pop(ws, None); return ws
@@ -155,7 +168,7 @@ async def start(m: Message):
     if user(m.from_user.id): return await m.answer("Welcome back!", reply_markup=menu())
     kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True,
                              keyboard=[[KeyboardButton(text="📱 Share phone to register", request_contact=True)]])
-    await m.answer("Welcome to Jo Bingo! Please register with your phone number.", reply_markup=kb)
+    await m.answer("Welcome to HS Bingo! Please register with your phone number.", reply_markup=kb)
 
 @dp.message(F.contact)
 async def contact(m: Message):
@@ -236,7 +249,8 @@ async def main():
     await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in [
         ("play", "Play"), ("balance", "Balance"), ("deposit", "Deposit"), ("withdraw", "Withdraw"),
         ("agent", "Agent"), ("support", "Support"), ("change_username", "Change name")]])
-    print("\n=== RUNNING ===\nGame address :", BASE, "\nAdmin website:", BASE + "/admin  (password = ADMIN_PASS)\n")
+    print("\n=== RUNNING ===\nGame address :", BASE, "\nAdmin website:", BASE + "/admin  (password = ADMIN_PASS)")
+    print("Test players:", BOTS, "| Pick time:", LOBBY, "s | Winner screen:", WIN_SHOW, "s\n")
     asyncio.create_task(game_loop()); await dp.start_polling(bot)
 
 if __name__ == "__main__": asyncio.run(main())
