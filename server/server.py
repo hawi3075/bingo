@@ -21,7 +21,7 @@ BASE = os.environ.get("BASE_URL", "").rstrip("/")
 ADMIN = int(os.environ.get("ADMIN_ID") or 0); ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 ACCT = {"Telebirr": os.environ.get("TELEBIRR_NO", "0911000000"), "CBEBirr": os.environ.get("CBE_NO", "0911000000")}
 STAKE, BONUS, CALL_EVERY, CUT = 20, 20, 4, 0.2
-LOBBY = 7      # seconds to pick a card
+LOBBY = 30     # seconds to pick a card
 WIN_SHOW = 7   # seconds the winner card stays on screen
 BOTS = int(os.environ.get("TEST_BOTS") or 0)  # test mode: fake players (0 = off)
 CARDS = json.load(open(os.path.join(HERE, "cards.json")))  # 432 different cards
