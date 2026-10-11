@@ -146,10 +146,10 @@ function onMsg(e){const d=JSON.parse(e.data);
   renderMaster(d.called,n);tone(300+c*110,.18);tone(500+c*110,.18,.12);say(L[c]+" "+n);hap();
   if(d.card){const k=need(d.card,d.called);$("msg").textContent=k<=1?"🔥 1 number to BINGO!":k==2?"⚡ Only 2 to go!":"Your card #"+d.mine}else $("msg").textContent="👀 Round in progress — wait for the next round";
   renderGame()}
- if(d.t=="win"){show("win");const g=d.grid,m=new Set([...d.called,0]),ln=lines(g).find(l=>l.every(p=>m.has(cellAt(g,p)))),ls=new Set(ln||[]),mine=me&&me.slice(-4)==d.ids[0];
+ if(d.t=="win"){show("win");const g=d.grid,m=new Set([...d.called,0]),ln=lines(g).find(l=>l.every(p=>m.has(cellAt(g,p)))),ls=new Set(ln||[]),mine=me&&d.ids.includes(me.slice(-4));
   $("tr").textContent=mine?"🥳":"🏆";$("bw").textContent=mine?"YOU WON!":"BINGO!";
-  $("wn").textContent=d.names[0]+" (*"+d.ids[0]+")";$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
-  $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards[0];
+  $("wn").textContent=d.names.map((n,i)=>n+" (*"+d.ids[i]+")").join(" & ");$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
+  $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards.join(", ");
   [523,659,784,1047,1319].forEach((f,i)=>tone(f,.3,i*.14));say(mine?"Congratulations! You won!":"Bingo! We have a winner");confetti();hap("heavy");
   let s=d.next||7;const tot=s;$("nx").textContent="Next round in "+s+"s";$("nb").style.width="100%";clearInterval(tick);
   tick=setInterval(()=>{s--;$("nx").textContent="Next round in "+Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/tot*100+"%";if(s<=0)clearInterval(tick)},1000)}}
