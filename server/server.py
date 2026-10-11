@@ -94,6 +94,7 @@ async def run_game():  # one endless series of rounds
             winners = [u for u, c in G.of_user.items() if is_bingo(c, G.called)]
             if winners: break
             await asyncio.sleep(CALL_EVERY)
+        random.shuffle(winners)  # on a tie, nobody is always shown first
         share = round(G.prize / len(winners), 2)
         for u in winners:
             add(u, share)
