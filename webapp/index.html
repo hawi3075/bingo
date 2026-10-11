@@ -91,7 +91,7 @@ body:before{background:#ec4899;top:-60px;left:-60px}body:after{background:#22d3e
 </div>
 
 <div id="win" class="scr">
- <div class="trophy" id="tr">🏆</div><h1 class="big" id="bw">BINGO!</h1>
+ <div class="trophy" id="tr">🏆</div><h1 class="big" id="bw">WINNER!</h1>
  <div style="text-align:center;margin:8px"><span class="chip" id="wn"></span> <b>has won the game</b></div>
  <div class="board glass" id="wb" style="margin:6px auto 0"></div>
  <div class="glass" style="margin-top:8px;padding-top:10px"><div class="foot"><span id="wp"></span><span id="wc"></span></div></div>
@@ -102,7 +102,7 @@ body:before{background:#ec4899;top:-60px;left:-60px}body:after{background:#22d3e
 const tg=window.Telegram&&Telegram.WebApp;if(tg){tg.expand();tg.ready()}
 setTimeout(()=>$("intro").classList.add("off"),2200);
 const $=id=>document.getElementById(id),L="BINGO",COL=["#ef4444","#3b82f6","#eab308","#22c55e","#a855f7"],HD=["#f59e0b","#22c55e","#3b82f6","#ef4444","#a855f7"];
-const colOf=n=>Math.floor((n-1)/15),me=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user?String(tg.initDataUnsafe.user.id):"";
+const colOf=n=>Math.floor((n-1)/15);
 let S={called:[],card:null,players:0,auto:true,man:new Set()},mute=false,ac,tick,ws;
 const show=id=>["lobby","game","win"].forEach(x=>$(x).classList.toggle("on",x==id));
 const hap=t=>{try{tg.HapticFeedback.impactOccurred(t||"medium")}catch(e){}};
@@ -115,7 +115,7 @@ function connect(){ // reconnects by itself if the internet drops
 }
 function tone(f,d=.15,t=0){if(mute)return;try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ac.destination);
  const T=ac.currentTime+t;g.gain.setValueAtTime(.25,T);g.gain.exponentialRampToValueAtTime(.001,T+d);o.start(T);o.stop(T+d)}catch(e){}}
-function say(t){if(mute||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
+function say(t){if(mute||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=1;speechSynthesis.cancel();speechSynthesis.speak(u)}
 function boardHTML(c,called,mode,ls){
  if(!c)return"";let h=[...L].map((l,i)=>`<div class="h" style="background:${HD[i]}">${l}</div>`).join("");const set=new Set(called);
  c.forEach((row,r)=>row.forEach((x,k)=>{const free=x===0,on=free||(mode=="play"?(S.auto?set.has(x):S.man.has(x)&&set.has(x)):set.has(x));
@@ -146,10 +146,10 @@ function onMsg(e){const d=JSON.parse(e.data);
   renderMaster(d.called,n);tone(300+c*110,.18);tone(500+c*110,.18,.12);say(L[c]+" "+n);hap();
   if(d.card){const k=need(d.card,d.called);$("msg").textContent=k<=1?"🔥 1 number to BINGO!":k==2?"⚡ Only 2 to go!":"Your card #"+d.mine}else $("msg").textContent="👀 Round in progress — wait for the next round";
   renderGame()}
- if(d.t=="win"){show("win");const g=d.grid,m=new Set([...d.called,0]),ln=lines(g).find(l=>l.every(p=>m.has(cellAt(g,p)))),ls=new Set(ln||[]),mine=me&&d.ids.includes(me.slice(-4));
-  $("tr").textContent=mine?"🥳":"🏆";$("bw").textContent=mine?"YOU WON!":"BINGO!";
-  $("wn").textContent=d.names.map((n,i)=>n+" (*"+d.ids[i]+")").join(" & ");$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
-  $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards.join(", ");
+ if(d.t=="win"){show("win");const g=d.grid,m=new Set([...d.called,0]),ln=lines(g).find(l=>l.every(p=>m.has(cellAt(g,p)))),ls=new Set(ln||[]),mine=d.you===true;
+  $("tr").textContent=mine?"🥳":"🏆";$("bw").textContent=mine?"YOU WON!":"WINNER!";
+  $("wn").textContent=d.names[0]+" (*"+d.ids[0]+")";$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
+  $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards[0];
   [523,659,784,1047,1319].forEach((f,i)=>tone(f,.3,i*.14));say(mine?"Congratulations! You won!":"Bingo! We have a winner");confetti();hap("heavy");
   let s=d.next||7;const tot=s;$("nx").textContent="Next round in "+s+"s";$("nb").style.width="100%";clearInterval(tick);
   tick=setInterval(()=>{s--;$("nx").textContent="Next round in "+Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/tot*100+"%";if(s<=0)clearInterval(tick)},1000)}}
