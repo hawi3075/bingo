@@ -63,7 +63,7 @@ async def bc_call(n):
     for ws, uid in list(conns.items()):
         mine = G.of_user.get(uid)
         await send(ws, {"t": "call", "n": n, "called": G.called, "prize": G.prize, "mine": mine,
-                        "card": card(mine) if mine else None})
+                        "players": len(G.of_user), "card": card(mine) if mine else None})
 
 def pick(uid, n):
     if G.phase != "lobby" or not 1 <= n <= NCARDS or n in G.by_card: return
@@ -95,6 +95,7 @@ async def run_game():  # one endless series of rounds
             if winners: break
             await asyncio.sleep(CALL_EVERY)
         random.shuffle(winners)  # on a tie, nobody is always shown first
+        print(f"ROUND: {len(G.of_user)} players | numbers called: {len(G.called)} | winner(s): {[name_of(u) for u in winners]} | cards: {[G.of_user[u] for u in winners]}")
         share = round(G.prize / len(winners), 2)
         for u in winners:
             add(u, share)

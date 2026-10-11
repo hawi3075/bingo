@@ -140,7 +140,7 @@ function onMsg(e){const d=JSON.parse(e.data);
   $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="sendPick(${n})">${n}</button>`).join("");
   $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#a5b4fc;padding:22px 0">🎟️ Tap a number above.<br>Your card will appear here.</div>'}
  if(d.t=="call"){clearInterval(tick);show("game");S.card=d.card;S.called=d.called;const n=d.n,c=colOf(n);
-  $("gp").textContent=d.prize;$("gn").textContent=S.players;$("gc").textContent=d.called.length+"/75";
+  $("gp").textContent=d.prize;$("gn").textContent=d.players||S.players;$("gc").textContent=d.called.length+"/75";
   const b=$("ball");b.innerHTML=`<small>${L[c]}</small><div class="nm">${n}</div>`;b.style.setProperty("--c",COL[c]);b.classList.remove("go");void b.offsetWidth;b.classList.add("go");
   $("prev").innerHTML=d.called.slice(-4,-1).reverse().map(x=>`<i style="background:${COL[colOf(x)]}">${L[colOf(x)]}${x}</i>`).join("");
   renderMaster(d.called,n);tone(300+c*110,.18);tone(500+c*110,.18,.12);say(L[c]+" "+n);hap();
