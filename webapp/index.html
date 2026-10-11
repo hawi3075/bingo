@@ -95,7 +95,7 @@ body:before{background:#ec4899;top:-60px;left:-60px}body:after{background:#22d3e
  <div style="text-align:center;margin:8px"><span class="chip" id="wn"></span> <b>has won the game</b></div>
  <div class="board glass" id="wb" style="margin:6px auto 0"></div>
  <div class="glass" style="margin-top:8px;padding-top:10px"><div class="foot"><span id="wp"></span><span id="wc"></span></div></div>
- <div class="glass" style="margin-top:8px"><div class="cd" id="nx">10s</div><div class="bar"><i id="nb"></i></div></div>
+ <div class="glass" style="margin-top:8px"><div class="cd" id="nx">7s</div><div class="bar"><i id="nb"></i></div></div>
 </div>
 
 <script>
@@ -135,7 +135,7 @@ function confetti(){for(let i=0;i<50;i++){const e=document.createElement("div");
 function onMsg(e){const d=JSON.parse(e.data);
  if(d.t=="lobby"){clearInterval(tick);show("lobby");S.called=[];S.man=new Set();S.players=d.taken.length;
   $("bal").textContent=d.bal;$("stk").textContent=d.stake;$("cd").textContent="⏰ "+d.left+"s";
-  $("lmsg").textContent=d.mine?"✅ Card #"+d.mine+" selected — tap another to change":"👇 Pick your lucky card ("+d.stake+" ETB)";
+  $("lmsg").textContent=d.mine?"✅ Card #"+d.mine+" selected — tap another to change":(d.bal<d.stake?"⚠️ Not enough balance. You need "+d.stake+" ETB to play.":"👇 Pick your lucky card ("+d.stake+" ETB)");
   const t=new Set(d.taken);
   $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="sendPick(${n})">${n}</button>`).join("");
   $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#a5b4fc;padding:22px 0">🎟️ Tap a number above.<br>Your card will appear here.</div>'}
