@@ -1,5 +1,5 @@
 """HS Bingo: Telegram bot + game engine + web server + admin API."""
-import asyncio, json, os, random, hmac, hashlib, sqlite3, re, subprocess, base64, sys
+import asyncio, json, os, random, hmac, hashlib, sqlite3, re, subprocess, base64, sys, traceback
 from urllib.parse import parse_qsl
 from aiohttp import web, WSMsgType
 from aiogram import Bot, Dispatcher, F
@@ -34,7 +34,9 @@ def logx(k, uid, amt): db.execute("insert into log values(strftime('%s','now'),?
 def user(i): return db.execute("select phone,name,bal from u where id=?", (i,)).fetchone()
 def bal(i): u = user(i); return u[2] if u else 0
 def add(i, x): db.execute("update u set bal=bal+? where id=?", (x, i))
-def name_of(u): return "Bot" if u < 0 else user(u)[1]
+def name_of(u):
+    if u < 0: return "Bot"
+    r = user(u); return r[1] if r else "Player"
 
 # ---------- game engine ----------
 def card(n): return CARDS[n - 1]
@@ -72,7 +74,7 @@ def pick(uid, n):
     else: del G.by_card[old]
     G.by_card[n] = uid; G.of_user[uid] = n
 
-async def game_loop():
+async def run_game():  # one endless series of rounds
     while True:
         G.phase = "lobby"; G.of_user = {}; G.by_card = {}; G.called = []
         for s in range(LOBBY, 0, -1):
@@ -103,6 +105,14 @@ async def game_loop():
                             "grid": card(G.of_user[winners[0]]), "ids": [str(abs(u))[-4:] for u in winners],
                             "called": G.called, "next": WIN_SHOW})
         await asyncio.sleep(WIN_SHOW)
+
+async def game_loop():  # keeps the game alive even if a round fails
+    while True:
+        try:
+            await run_game()
+        except Exception:
+            traceback.print_exc()
+            G.phase = "lobby"; await asyncio.sleep(2)
 
 # ---------- web ----------
 def check(init):
@@ -246,11 +256,20 @@ async def main():
     r = web.AppRunner(app); await r.setup(); await web.TCPSite(r, "0.0.0.0", 8080).start()
     await open_tunnel()
     if not BASE: sys.exit("ERROR: no public address. Put cloudflared.exe next to start.bat or set BASE_URL in config.env.")
-    await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in [
-        ("play", "Play"), ("balance", "Balance"), ("deposit", "Deposit"), ("withdraw", "Withdraw"),
-        ("agent", "Agent"), ("support", "Support"), ("change_username", "Change name")]])
+    try:
+        await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in [
+            ("play", "Play"), ("balance", "Balance"), ("deposit", "Deposit"), ("withdraw", "Withdraw"),
+            ("agent", "Agent"), ("support", "Support"), ("change_username", "Change name")]])
+    except Exception as e:
+        print("Could not set menu commands (will retry next start):", e)
     print("\n=== RUNNING ===\nGame address :", BASE, "\nAdmin website:", BASE + "/admin  (password = ADMIN_PASS)")
     print("Test players:", BOTS, "| Pick time:", LOBBY, "s | Winner screen:", WIN_SHOW, "s\n")
-    asyncio.create_task(game_loop()); await dp.start_polling(bot)
+    asyncio.create_task(game_loop())
+    while True:  # if the internet drops, wait and reconnect instead of crashing
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            print("Network problem, retrying in 5 seconds:", e)
+            await asyncio.sleep(5)
 
 if __name__ == "__main__": asyncio.run(main())
