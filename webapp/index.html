@@ -103,12 +103,16 @@ const tg=window.Telegram&&Telegram.WebApp;if(tg){tg.expand();tg.ready()}
 setTimeout(()=>$("intro").classList.add("off"),2200);
 const $=id=>document.getElementById(id),L="BINGO",COL=["#ef4444","#3b82f6","#eab308","#22c55e","#a855f7"],HD=["#f59e0b","#22c55e","#3b82f6","#ef4444","#a855f7"];
 const colOf=n=>Math.floor((n-1)/15),me=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user?String(tg.initDataUnsafe.user.id):"";
-let S={called:[],card:null,players:0,auto:true,man:new Set()},mute=false,ac,tick,last=0;
-const ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws");
-ws.onopen=()=>ws.send(JSON.stringify({auth:tg?tg.initData:""}));
-ws.onclose=()=>{$("lmsg").textContent="Disconnected. Reopen from the bot."};
+let S={called:[],card:null,players:0,auto:true,man:new Set()},mute=false,ac,tick,ws;
 const show=id=>["lobby","game","win"].forEach(x=>$(x).classList.toggle("on",x==id));
 const hap=t=>{try{tg.HapticFeedback.impactOccurred(t||"medium")}catch(e){}};
+function sendPick(n){hap("light");if(ws&&ws.readyState==1)ws.send(JSON.stringify({pick:n}))}
+function connect(){ // reconnects by itself if the internet drops
+ ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws");
+ ws.onopen=()=>ws.send(JSON.stringify({auth:tg?tg.initData:""}));
+ ws.onmessage=onMsg;
+ ws.onclose=()=>{$("lmsg").textContent="🔄 Reconnecting…";$("msg").textContent="🔄 Reconnecting…";setTimeout(connect,2000)};
+}
 function tone(f,d=.15,t=0){if(mute)return;try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ac.destination);
  const T=ac.currentTime+t;g.gain.setValueAtTime(.25,T);g.gain.exponentialRampToValueAtTime(.001,T+d);o.start(T);o.stop(T+d)}catch(e){}}
 function say(t){if(mute||!window.speechSynthesis)return;const u=new SpeechSynthesisUtterance(t);u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}
@@ -128,14 +132,14 @@ function renderMaster(called,n){let h="";for(let r=0;r<5;r++){h+=`<u class="h" s
  for(let k=1;k<=15;k++){const x=r*15+k,on=called.includes(x);h+=`<u class="${on?"on":""}${x==n?" new":""}" style="--c:${COL[r]}">${x}</u>`}}$("mb").innerHTML=h}
 function confetti(){for(let i=0;i<50;i++){const e=document.createElement("div");e.className="cf";e.textContent=["🎉","⭐","🎊","✨","💛","🪙"][i%6];
  e.style.left=Math.random()*100+"vw";e.style.animationDelay=Math.random()*1.6+"s";document.body.appendChild(e);setTimeout(()=>e.remove(),5600)}}
-ws.onmessage=e=>{const d=JSON.parse(e.data);
+function onMsg(e){const d=JSON.parse(e.data);
  if(d.t=="lobby"){clearInterval(tick);show("lobby");S.called=[];S.man=new Set();S.players=d.taken.length;
   $("bal").textContent=d.bal;$("stk").textContent=d.stake;$("cd").textContent="⏰ "+d.left+"s";
   $("lmsg").textContent=d.mine?"✅ Card #"+d.mine+" selected — tap another to change":"👇 Pick your lucky card ("+d.stake+" ETB)";
   const t=new Set(d.taken);
-  $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="hap('light');ws.send(JSON.stringify({pick:${n}}))">${n}</button>`).join("");
+  $("grid").innerHTML=Array.from({length:d.total},(_,i)=>i+1).map(n=>`<button class="${n==d.mine?"m":t.has(n)?"t":""}" ${t.has(n)&&n!=d.mine?"disabled":""} onclick="sendPick(${n})">${n}</button>`).join("");
   $("pre").innerHTML=d.card?boardHTML(d.card,[],"pre"):'<div style="grid-column:1/-1;text-align:center;color:#a5b4fc;padding:22px 0">🎟️ Tap a number above.<br>Your card will appear here.</div>'}
- if(d.t=="call"){show("game");S.card=d.card;S.called=d.called;const n=d.n,c=colOf(n);
+ if(d.t=="call"){clearInterval(tick);show("game");S.card=d.card;S.called=d.called;const n=d.n,c=colOf(n);
   $("gp").textContent=d.prize;$("gn").textContent=S.players;$("gc").textContent=d.called.length+"/75";
   const b=$("ball");b.innerHTML=`<small>${L[c]}</small><div class="nm">${n}</div>`;b.style.setProperty("--c",COL[c]);b.classList.remove("go");void b.offsetWidth;b.classList.add("go");
   $("prev").innerHTML=d.called.slice(-4,-1).reverse().map(x=>`<i style="background:${COL[colOf(x)]}">${L[colOf(x)]}${x}</i>`).join("");
@@ -147,6 +151,7 @@ ws.onmessage=e=>{const d=JSON.parse(e.data);
   $("wn").textContent=d.names[0]+" (*"+d.ids[0]+")";$("wb").innerHTML=boardHTML(g,d.called,"win",ls);
   $("wp").textContent="Prize: "+d.prize+" ETB";$("wc").textContent="Card# "+d.cards[0];
   [523,659,784,1047,1319].forEach((f,i)=>tone(f,.3,i*.14));say(mine?"Congratulations! You won!":"Bingo! We have a winner");confetti();hap("heavy");
-  let s=d.next||10;const tot=s;$("nx").textContent="Next round in "+s+"s";$("nb").style.width="100%";clearInterval(tick);
-  tick=setInterval(()=>{s--;$("nx").textContent="Next round in "+Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/tot*100+"%";if(s<=0)clearInterval(tick)},1000)}};
+  let s=d.next||7;const tot=s;$("nx").textContent="Next round in "+s+"s";$("nb").style.width="100%";clearInterval(tick);
+  tick=setInterval(()=>{s--;$("nx").textContent="Next round in "+Math.max(s,0)+"s";$("nb").style.width=Math.max(s,0)/tot*100+"%";if(s<=0)clearInterval(tick)},1000)}}
+connect();
 </script></body></html>
