@@ -20,9 +20,12 @@ if ":" not in TOKEN: sys.exit("ERROR: open config.env and put your BOT_TOKEN (fr
 BASE = os.environ.get("BASE_URL", "").rstrip("/")
 ADMIN = int(os.environ.get("ADMIN_ID") or 0); ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 ACCT = {"Telebirr": os.environ.get("TELEBIRR_NO", "0911000000"), "CBEBirr": os.environ.get("CBE_NO", "0911000000")}
-STAKE, BONUS, CALL_EVERY, CUT = 20, 20, 4, 0.2
-LOBBY = 30     # seconds to pick a card
-WIN_SHOW = 7   # seconds the winner card stays on screen
+STAKE, BONUS, CUT = 20, 20, 0.2
+LOBBY = 30        # seconds to pick a card
+WIN_SHOW = 7      # seconds the winner card stays on screen
+FAST_N = 10       # the first FAST_N numbers are called quickly
+CALL_FAST = 1.5   # seconds between the first numbers
+CALL_SLOW = 3     # seconds between the other numbers
 BOTS = int(os.environ.get("TEST_BOTS") or 0)  # test mode: fake players (0 = off)
 CARDS = json.load(open(os.path.join(HERE, "cards.json")))  # 432 different cards
 NCARDS = len(CARDS)
@@ -93,19 +96,16 @@ async def run_game():  # one endless series of rounds
             G.called.append(n); await bc_call(n)
             winners = [u for u, c in G.of_user.items() if is_bingo(c, G.called)]
             if winners: break
-            await asyncio.sleep(CALL_EVERY)
-        random.shuffle(winners)  # on a tie, nobody is always shown first
-        print(f"ROUND: {len(G.of_user)} players | numbers called: {len(G.called)} | winner(s): {[name_of(u) for u in winners]} | cards: {[G.of_user[u] for u in winners]}")
-        share = round(G.prize / len(winners), 2)
-        for u in winners:
-            add(u, share)
-            if u > 0: logx("win", u, share)
+            await asyncio.sleep(CALL_FAST if len(G.called) < FAST_N else CALL_SLOW)
+        winner = random.choice(winners)  # exactly ONE winner, even if cards tie
+        print(f"ROUND: {len(G.of_user)} players | numbers called: {len(G.called)} | tie between {len(winners)} | winner: {name_of(winner)} | card {G.of_user[winner]}")
+        add(winner, G.prize)
+        if winner > 0: logx("win", winner, G.prize)
         if not BOTS: logx("house", 0, round(pool - G.prize, 2)); logx("round", 0, len(G.of_user))
-        names = [name_of(u) for u in winners]
-        for ws in list(conns):
-            await send(ws, {"t": "win", "names": names, "prize": share, "cards": [G.of_user[u] for u in winners],
-                            "grid": card(G.of_user[winners[0]]), "ids": [str(abs(u))[-4:] for u in winners],
-                            "called": G.called, "next": WIN_SHOW})
+        for ws, uid in list(conns.items()):
+            await send(ws, {"t": "win", "names": [name_of(winner)], "prize": G.prize, "cards": [G.of_user[winner]],
+                            "grid": card(G.of_user[winner]), "ids": [str(abs(winner))[-4:]],
+                            "called": G.called, "next": WIN_SHOW, "you": uid == winner})
         await asyncio.sleep(WIN_SHOW)
 
 async def game_loop():  # keeps the game alive even if a round fails
