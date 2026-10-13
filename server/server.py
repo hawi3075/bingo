@@ -1,11 +1,13 @@
-"""HS Bingo: Telegram bot + game engine + web server + admin API (ledger database)."""
-import asyncio, json, os, random, hmac, hashlib, sqlite3, re, subprocess, base64, sys, traceback, glob
+"""HS Bingo: Telegram bot + game engine + web server + admin API (PostgreSQL / Supabase ledger)."""
+import asyncio, json, os, random, hmac, hashlib, re, subprocess, base64, sys, traceback, uuid
 from urllib.parse import parse_qsl
 from aiohttp import web, WSMsgType
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import (Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, BotCommand)
+import psycopg
+from psycopg import errors as pgerr
 
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 
@@ -17,6 +19,8 @@ def load_config():  # reads config.env (KEY=value lines)
 load_config()
 TOKEN = os.environ.get("BOT_TOKEN", "")
 if ":" not in TOKEN: sys.exit("ERROR: open config.env and put your BOT_TOKEN (from @BotFather).")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if not DATABASE_URL.startswith("postgres"): sys.exit("ERROR: open config.env and put your Supabase DATABASE_URL (Session pooler link).")
 BASE = os.environ.get("BASE_URL", "").rstrip("/")
 ADMIN = int(os.environ.get("ADMIN_ID") or 0); ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 ACCT = {"Telebirr": os.environ.get("TELEBIRR_NO", "0911000000"), "CBEBirr": os.environ.get("CBE_NO", "0911000000")}
@@ -30,76 +34,102 @@ BOTS = int(os.environ.get("TEST_BOTS") or 0)  # test mode: fake players (0 = off
 CARDS = json.load(open(os.path.join(HERE, "cards.json")))  # 432 different cards
 NCARDS = len(CARDS)
 
-# ---------- database (ledger) ----------
-db = sqlite3.connect(os.path.join(ROOT, "bingo.db"), isolation_level=None)
-db.execute("pragma journal_mode=wal"); db.execute("pragma synchronous=full"); db.execute("pragma foreign_keys=on")
-db.executescript("""
-create table if not exists users(id integer primary key, phone text, name text, balance integer not null default 0 check(balance>=0), created integer);
-create table if not exists ledger(id integer primary key autoincrement, ts integer, uid integer, kind text, amount integer,
-  balance_after integer, ref text unique, note text);
-create index if not exists ledger_uid on ledger(uid);
-create table if not exists rounds(id integer primary key autoincrement, ts integer, status text, test integer default 0,
-  players integer, prize integer, house integer, winner integer, card integer, called text);
-create table if not exists round_players(round_id integer, uid integer, card integer, primary key(round_id, uid));
-create table if not exists requests(id integer primary key autoincrement, ts integer, uid integer, kind text, amount integer,
-  ref text, status text default 'pending');
-""")
+# ---------- database (PostgreSQL ledger) ----------
+_conn = None
+def conn():
+    global _conn
+    if _conn is None or _conn.closed:
+        _conn = psycopg.connect(DATABASE_URL, autocommit=True, connect_timeout=15, prepare_threshold=None)
+    return _conn
 
+def q(sql, args=(), one=False, many=False):
+    """Run one SQL command. Reconnects once if the internet dropped."""
+    global _conn
+    for attempt in (1, 2):
+        try:
+            cur = conn().execute(sql, args)
+            return cur.fetchone() if one else cur.fetchall() if many else cur
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            _conn = None
+            if attempt == 2: raise
+
+TS = "bigint default extract(epoch from now())::bigint"
+SCHEMA = f"""
+create table if not exists users(id bigint primary key, phone text, name text, balance bigint not null default 0 check(balance>=0), created {TS});
+create table if not exists ledger(id bigint generated always as identity primary key, ts {TS}, uid bigint, kind text, amount bigint,
+  balance_after bigint, ref text unique, note text);
+create index if not exists ledger_uid on ledger(uid);
+create table if not exists rounds(id bigint generated always as identity primary key, ts {TS}, status text, test int default 0,
+  players int, prize bigint, house bigint, winner bigint, card int, called text);
+create table if not exists round_players(round_id bigint, uid bigint, card int, primary key(round_id, uid));
+create table if not exists requests(id bigint generated always as identity primary key, ts {TS}, uid bigint, kind text, amount bigint,
+  ref text, status text default 'pending');
+alter table users enable row level security; alter table ledger enable row level security;
+alter table rounds enable row level security; alter table round_players enable row level security;
+alter table requests enable row level security;
+"""
+
+BAL = {}  # balance cache so the game does not ask the database every second
 def move(uid, kind, amt, ref=None, note=""):
     """One atomic money movement (+credit / -debit). Returns the new balance, or None if refused
     (not enough money, or this ref was already used)."""
-    try:
-        db.execute("begin immediate")
-        row = db.execute("select balance from users where id=?", (uid,)).fetchone()
-        if not row or row[0] + amt < 0: db.execute("rollback"); return None
-        nb = row[0] + amt
-        db.execute("insert into ledger(ts,uid,kind,amount,balance_after,ref,note) values(strftime('%s','now'),?,?,?,?,?,?)",
-                   (uid, kind, amt, nb, ref, note))
-        db.execute("update users set balance=? where id=?", (nb, uid))
-        db.execute("commit"); return nb
-    except sqlite3.IntegrityError:
-        db.execute("rollback"); return None
-    except Exception:
-        try: db.execute("rollback")
-        except Exception: pass
-        raise
+    global _conn
+    ref = ref or f"auto:{uuid.uuid4()}"
+    for attempt in (1, 2):
+        try:
+            with conn().transaction():
+                row = conn().execute("select balance from users where id=%s for update", (uid,)).fetchone()
+                if not row or row[0] + amt < 0: return None
+                nb = row[0] + amt
+                conn().execute("insert into ledger(uid,kind,amount,balance_after,ref,note) values(%s,%s,%s,%s,%s,%s)",
+                               (uid, kind, amt, nb, ref, note))
+                conn().execute("update users set balance=%s where id=%s", (nb, uid))
+            BAL[uid] = nb; return nb
+        except pgerr.UniqueViolation:
+            return None
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            _conn = None
+            if attempt == 2: raise
 
-def ref_used(ref): return db.execute("select 1 from ledger where ref=?", (ref,)).fetchone() is not None
-def user(i): return db.execute("select phone,name,balance from users where id=?", (i,)).fetchone()
-def bal(i): u = user(i); return u[2] if u else 0
-def B(x): return x // 100 if x % 100 == 0 else round(x / 100, 2)  # santim -> birr for display
+def ref_used(ref): return q("select 1 from ledger where ref=%s", (ref,), one=True) is not None
+def user(i): return q("select phone,name,balance from users where id=%s", (i,), one=True)
+def bal(i):
+    if i not in BAL:
+        u = user(i); BAL[i] = u[2] if u else 0
+    return BAL[i]
+def B(x): return int(x) // 100 if int(x) % 100 == 0 else round(int(x) / 100, 2)  # santim -> birr for display
 def name_of(u):
     if u < 0: return "Bot"
     r = user(u); return r[1] if r else "Player"
 
-def migrate_old():  # one time: copy balances from the old table `u` (birr, real numbers)
-    has_old = db.execute("select 1 from sqlite_master where name='u'").fetchone()
-    if has_old and not db.execute("select 1 from users limit 1").fetchone():
-        for uid, phone, name, b in db.execute("select id,phone,name,bal from u").fetchall():
-            db.execute("insert into users(id,phone,name,balance,created) values(?,?,?,0,strftime('%s','now'))", (uid, phone, name))
-            move(uid, "migrate", int(round((b or 0) * 100)), ref=f"migrate:{uid}", note="from old database")
-        print("Old users copied into the new ledger database.")
+def migrate_sqlite():  # one time: copy users and balances from the old bingo.db (SQLite) file
+    path = os.path.join(ROOT, "bingo.db")
+    if not os.path.exists(path) or q("select 1 from users limit 1", one=True): return
+    import sqlite3
+    old = sqlite3.connect(path)
+    tabs = {r[0] for r in old.execute("select name from sqlite_master where type='table'")}
+    rows = []
+    if "users" in tabs: rows = old.execute("select id,phone,name,balance from users").fetchall()
+    elif "u" in tabs: rows = [(i, p, n, int(round((b or 0) * 100))) for i, p, n, b in old.execute("select id,phone,name,bal from u")]
+    for i, p, n, b in rows:
+        q("insert into users(id,phone,name,balance) values(%s,%s,%s,0) on conflict do nothing", (i, p, n))
+        if b: move(i, "migrate", int(b), ref=f"migrate:{i}", note="from SQLite")
+    print(f"Copied {len(rows)} users from the old SQLite database.")
 
 def recover_rounds():  # after a crash: refund stakes of rounds that never finished
-    for rid, in db.execute("select id from rounds where status in ('lobby','playing')").fetchall():
+    for rid, in q("select id from rounds where status in ('lobby','playing')", many=True):
         if ref_used(f"win:{rid}"):
-            db.execute("update rounds set status='done' where id=?", (rid,)); continue
-        for uid, in db.execute("select uid from round_players where round_id=?", (rid,)).fetchall():
+            q("update rounds set status='done' where id=%s", (rid,)); continue
+        for uid, in q("select uid from round_players where round_id=%s", (rid,), many=True):
             move(uid, "refund", STAKE, ref=f"refund:{rid}:{uid}", note="round interrupted")
-        db.execute("update rounds set status='cancelled' where id=?", (rid,))
+        q("update rounds set status='cancelled' where id=%s", (rid,))
 
-migrate_old(); recover_rounds()
-
-async def backup_loop():  # copy of the database every 6 hours, keeps the newest 7
-    os.makedirs(os.path.join(ROOT, "backups"), exist_ok=True)
-    while True:
-        try:
-            dst = sqlite3.connect(os.path.join(ROOT, "backups", f"bingo-{int(asyncio.get_running_loop().time())}-{random.randint(1000,9999)}.db"))
-            db.backup(dst); dst.close()
-            files = sorted(glob.glob(os.path.join(ROOT, "backups", "bingo-*.db")), key=os.path.getmtime)
-            for f in files[:-7]: os.remove(f)
-        except Exception as e: print("Backup failed:", e)
-        await asyncio.sleep(6 * 3600)
+def init_db():
+    try:
+        conn().execute(SCHEMA)
+    except Exception as e:
+        sys.exit(f"ERROR: cannot connect to the database. Check DATABASE_URL in config.env (use the Session pooler link and your real password).\n{e}")
+    migrate_sqlite(); recover_rounds()
 
 # ---------- game engine ----------
 def card(n): return CARDS[n - 1]
@@ -135,12 +165,12 @@ def pick(uid, n):
         if move(uid, "stake", -STAKE, ref=f"stake:{G.rid}:{uid}") is None: return
     else: del G.by_card[old]
     G.by_card[n] = uid; G.of_user[uid] = n
-    db.execute("insert into round_players values(?,?,?) on conflict(round_id,uid) do update set card=excluded.card", (G.rid, uid, n))
+    q("insert into round_players values(%s,%s,%s) on conflict(round_id,uid) do update set card=excluded.card", (G.rid, uid, n))
 
 async def run_game():  # one endless series of rounds
     while True:
         G.phase = "lobby"; G.of_user = {}; G.by_card = {}; G.called = []
-        G.rid = db.execute("insert into rounds(ts,status,test) values(strftime('%s','now'),'lobby',?)", (1 if BOTS else 0,)).lastrowid
+        G.rid = q("insert into rounds(status,test) values('lobby',%s) returning id", (1 if BOTS else 0,), one=True)[0]
         for s in range(LOBBY, 0, -1):
             G.left = s; await push_lobby(); await asyncio.sleep(1)
         if BOTS and len(G.of_user) >= 1:  # test mode: add fake players
@@ -150,10 +180,10 @@ async def run_game():  # one endless series of rounds
             await push_lobby()
         if len(G.of_user) < 2:  # a round needs 2+ players: refund everyone
             for u in [u for u in G.of_user if u > 0]: move(u, "refund", STAKE, ref=f"refund:{G.rid}:{u}", note="not enough players")
-            db.execute("update rounds set status='cancelled' where id=?", (G.rid,))
+            q("update rounds set status='cancelled' where id=%s", (G.rid,))
             continue
         G.phase = "play"; pool = len(G.of_user) * STAKE; G.prize = int(pool * (1 - CUT))
-        db.execute("update rounds set status='playing' where id=?", (G.rid,))
+        q("update rounds set status='playing' where id=%s", (G.rid,))
         nums = list(range(1, 76)); random.shuffle(nums); winners = []
         for n in nums:
             G.called.append(n); await bc_call(n)
@@ -163,8 +193,8 @@ async def run_game():  # one endless series of rounds
         winner = random.choice(winners)  # exactly ONE winner, even if cards tie
         print(f"ROUND {G.rid}: {len(G.of_user)} players | numbers called: {len(G.called)} | tie between {len(winners)} | winner: {name_of(winner)} | card {G.of_user[winner]}")
         if winner > 0: move(winner, "win", G.prize, ref=f"win:{G.rid}", note=f"round {G.rid}")
-        db.execute("update rounds set status='done', winner=?, card=?, called=?, prize=?, house=?, players=? where id=?",
-                   (winner, G.of_user[winner], json.dumps(G.called), G.prize, pool - G.prize, len(G.of_user), G.rid))
+        q("update rounds set status='done', winner=%s, card=%s, called=%s, prize=%s, house=%s, players=%s where id=%s",
+          (winner, G.of_user[winner], json.dumps(G.called), G.prize, pool - G.prize, len(G.of_user), G.rid))
         for ws, uid in list(conns.items()):
             await send(ws, {"t": "win", "names": [name_of(winner)], "prize": B(G.prize), "cards": [G.of_user[winner]],
                             "grid": card(G.of_user[winner]), "ids": [str(abs(winner))[-4:]],
@@ -212,16 +242,16 @@ async def admin_files(req):  # serves the built React admin
     if not f.startswith(os.path.join(ROOT, "admin")) or not os.path.isfile(f): f = os.path.join(ROOT, "admin", "index.html")
     return web.FileResponse(f)
 
-def total(sql, *a): return db.execute(sql, a).fetchone()[0] or 0
+def total(sql, *a): return int(q(sql, a, one=True)[0] or 0)
 
 async def api_data(req):
     need_auth(req)
-    users = [dict(id=i, phone=p, name=n, bal=B(b)) for i, p, n, b in db.execute("select id,phone,name,balance from users order by rowid desc")]
+    users = [dict(id=i, phone=p, name=n, bal=B(b)) for i, p, n, b in q("select id,phone,name,balance from users order by created desc, id desc", many=True)]
     st = {"deposit": B(total("select sum(amount) from ledger where kind='deposit'")),
           "withdraw": B(-total("select sum(amount) from ledger where kind in ('withdraw_hold','withdraw_refund')")),
           "house": B(total("select sum(house) from rounds where status='done' and test=0")),
           "round": total("select count(*) from rounds where status='done' and test=0")}
-    logs = [dict(ts=t, kind=k, uid=u, amt=B(a)) for t, k, u, a in db.execute("select ts,kind,uid,amount from ledger order by id desc limit 30")]
+    logs = [dict(ts=t, kind=k, uid=u, amt=B(a)) for t, k, u, a in q("select ts,kind,uid,amount from ledger order by id desc limit 30", many=True)]
     return web.json_response({"users": users, "stats": st, "logs": logs, "online": len(conns), "phase": G.phase})
 
 async def api_adjust(req):
@@ -254,8 +284,7 @@ async def start(m: Message):
 async def contact(m: Message):
     if m.contact.user_id != m.from_user.id: return await m.answer("Please share your own number.")
     u = m.from_user.id
-    db.execute("insert or ignore into users(id,phone,name,balance,created) values(?,?,?,0,strftime('%s','now'))",
-               (u, m.contact.phone_number, m.from_user.first_name))
+    q("insert into users(id,phone,name,balance) values(%s,%s,%s,0) on conflict do nothing", (u, m.contact.phone_number, m.from_user.first_name))
     move(u, "bonus", BONUS, ref=f"bonus:{u}", note="welcome bonus")  # only once per user
     await m.answer(f"✅ Registered successfully! You got {B(BONUS)} birr to play. Stake per game: {B(STAKE)} birr.", reply_markup=menu())
 
@@ -273,7 +302,7 @@ async def choose(c: CallbackQuery):
 async def admin_cb(c: CallbackQuery):
     if c.from_user.id != ADMIN: return await c.answer("Admins only")
     act, rid = c.data.split(":"); rid = int(rid)
-    r = db.execute("select uid,kind,amount,ref,status from requests where id=?", (rid,)).fetchone()
+    r = q("select uid,kind,amount,ref,status from requests where id=%s", (rid,), one=True)
     if not r or r[4] != "pending": return await c.answer("Already processed")
     uid, kind, amt, ref, _ = r
     if kind == "dep":
@@ -282,7 +311,7 @@ async def admin_cb(c: CallbackQuery):
                 return await c.answer("Refused: this transaction ref was already credited")
     else:
         if act == "no": move(uid, "withdraw_refund", amt, ref=f"wdref:{rid}", note="rejected")
-    db.execute("update requests set status=? where id=?", ("approved" if act == "ok" else "rejected", rid))
+    q("update requests set status=%s where id=%s", ("approved" if act == "ok" else "rejected", rid))
     await bot.send_message(uid, f"{'✅ Approved' if act == 'ok' else '❌ Rejected'}: {'deposit' if kind == 'dep' else 'withdrawal'} {B(amt)} birr. Balance: {B(bal(uid))}")
     await c.message.edit_text(c.message.text + f"\n→ {act.upper()}")
 
@@ -305,20 +334,20 @@ async def text(m: Message):
     p = pend.pop(uid, None)
     if not p: return
     if p[0] == "name":
-        db.execute("update users set name=? where id=?", (t[:20], uid)); return await m.answer("✅ Username updated.", reply_markup=menu())
+        q("update users set name=%s where id=%s", (t[:20], uid)); return await m.answer("✅ Username updated.", reply_markup=menu())
     parts = t.split()
     try: amt = int(round(float(parts[0]) * 100)); assert amt > 0; ref = parts[1]
     except Exception: return await m.answer("Invalid format. Write: <amount> <reference>  (example: 100 DKX123). Start again from the menu.")
     kind = p[0]
     if kind == "dep":
         if amt < MIN_DEP: return await m.answer(f"Minimum deposit is {B(MIN_DEP)} birr.")
-        if db.execute("select 1 from requests where kind='dep' and lower(ref)=? and status!='rejected'", (ref.lower(),)).fetchone() or ref_used(f"dep:{ref.lower()}"):
+        if q("select 1 from requests where kind='dep' and lower(ref)=%s and status<>'rejected'", (ref.lower(),), one=True) or ref_used(f"dep:{ref.lower()}"):
             return await m.answer("❌ This transaction reference was already used.")
     else:
         if amt < MIN_WD: return await m.answer(f"Minimum withdrawal is {B(MIN_WD)} birr.")
-    rid = db.execute("insert into requests(ts,uid,kind,amount,ref) values(strftime('%s','now'),?,?,?,?)", (uid, kind, amt, ref)).lastrowid
+    rid = q("insert into requests(uid,kind,amount,ref) values(%s,%s,%s,%s) returning id", (uid, kind, amt, ref), one=True)[0]
     if kind == "wd" and move(uid, "withdraw_hold", -amt, ref=f"wdreq:{rid}", note=f"to {ref}") is None:
-        db.execute("update requests set status='rejected' where id=?", (rid,)); return await m.answer("❌ Insufficient balance.")
+        q("update requests set status='rejected' where id=%s", (rid,)); return await m.answer("❌ Insufficient balance.")
     kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Approve", callback_data=f"ok:{rid}"),
         InlineKeyboardButton(text="❌ Reject", callback_data=f"no:{rid}")]])
@@ -338,6 +367,7 @@ async def open_tunnel():  # free public https address, automatic
         if not line: sys.exit("Tunnel failed. Set BASE_URL in config.env.")
 
 async def main():
+    init_db()
     app = web.Application()
     app.add_routes([web.get("/", game_page), web.get("/ws", ws_handler), web.get("/api/data", api_data),
                     web.post("/api/adjust", api_adjust), web.get("/admin", admin_files), web.get("/admin/{p:.*}", admin_files)])
@@ -351,8 +381,8 @@ async def main():
     except Exception as e:
         print("Could not set menu commands (will retry next start):", e)
     print("\n=== RUNNING ===\nGame address :", BASE, "\nAdmin website:", BASE + "/admin  (password = ADMIN_PASS)")
-    print("Test players:", BOTS, "| Pick time:", LOBBY, "s | Winner screen:", WIN_SHOW, "s | Database: ledger + backups\n")
-    asyncio.create_task(game_loop()); asyncio.create_task(backup_loop())
+    print("Test players:", BOTS, "| Pick time:", LOBBY, "s | Winner screen:", WIN_SHOW, "s | Database: Supabase PostgreSQL\n")
+    asyncio.create_task(game_loop())
     while True:  # if the internet drops, wait and reconnect instead of crashing
         try:
             await dp.start_polling(bot)
